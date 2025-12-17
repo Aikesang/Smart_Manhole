@@ -1,0 +1,16 @@
+../Core/Src/main.c:142:5:main	40	static
+../Core/Src/main.c:389:6:SystemClock_Config	112	static
+../Core/Src/main.c:439:6:RTC_Set_Wakeup_Timer	16	static
+../Core/Src/main.c:454:6:Enter_Stop_Mode	8	static
+../Core/Src/main.c:484:6:HAL_RTCEx_WakeUpTimerEventCallback	16	static
+../Core/Src/main.c:491:6:Delay_Start	16	static
+../Core/Src/main.c:498:6:Delay_Elapsed	8	static
+../Core/Src/main.c:508:6:Check_NB_Connection	8	static
+../Core/Src/main.c:527:6:Reset_NBModule	8	static
+../Core/Src/main.c:604:6:Move_DCMotor	16	static
+../Core/Src/main.c:643:9:Calibrate	40	static
+../Core/Src/main.c:686:6:HAL_UART_RxCpltCallback	24	static
+../Core/Src/main.c:721:6:Send_mqtt	16	static
+../Core/Src/main.c:727:6:Send_Wait_Start	16	static
+../Core/Src/main.c:735:6:Send_Wait_IsDone	16	static
+../Core/Src/main.c:754:6:Error_Handler	8	static,ignoring_inline_asm

@@ -1,0 +1,781 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "adc.h"
+#include "rtc.h"
+#include "tim.h"
+#include "usart.h"
+#include "gpio.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include "adc_pressure.h"
+#include "stdio.h"
+#include "string.h"
+#include "stdbool.h"
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+#define UART_BUFFER_SIZE 200
+
+#define DC_MOTOR1_PWM_CHANNEL    TIM_CHANNEL_1
+#define DC_MOTOR2_PWM_CHANNEL    TIM_CHANNEL_2
+#define DC_MOTOR_MAX_RUN_TIME    300000
+#define CURRENT_THRESHOLD        0.8f
+
+#define NB_CHECK_INTERVAL_MS 60000 // Check NB connection every 60 s
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+typedef enum{
+	Motor1,
+	Motor2
+} Motor;
+
+
+typedef enum {
+    MOTOR_STOP = 0,
+    MOTOR_RUNNING
+} Motor_State;
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+/* USER CODE BEGIN PFP */
+void Send_mqtt(const char *command);
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
+
+void Send_Wait_Start(const char* command, uint16_t timeout_ms);
+bool Send_Wait_IsDone(void);
+
+void Move_DCMotor(Motor motor, Motor_State state);
+uint8_t Calibrate(Motor motor);
+void Reset_NBModule(void);
+bool Check_NB_Connection(void);
+void Delay_Start(uint32_t ms);
+bool Delay_Elapsed(void);
+
+void RTC_Set_Wakeup_Timer(uint16_t seconds);
+void Enter_Stop_Mode(void);
+void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc);
+
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+uint8_t rx_buffer[1];
+uint8_t tx_buffer[UART_BUFFER_SIZE] = {0};
+uint8_t rx_buffer_full[UART_BUFFER_SIZE] = {0};
+volatile uint8_t rx_index = 0;
+
+float current_from_motor;
+float current_value;
+volatile uint8_t response_ready = 0;
+char response_buffer[UART_BUFFER_SIZE];
+
+volatile uint8_t calibration_done = 0;
+
+volatile bool open_lid = false;  // Open cap command
+volatile bool close_lid = false;  // Close cap command
+
+uint32_t last_nb_check_ms = 0;
+volatile uint8_t connection_fail_count = 0;
+
+uint32_t delay_start = 0;
+uint32_t delay_duration = 0;
+bool delay_active = false;
+const char *waiting_response = NULL;
+
+static bool sendInProgress = false;
+static uint32_t sendStartTick = 0;
+static uint16_t sendTimeout = 0;
+static const char* sendCommand = NULL;
+
+static char mqtt_payload_water[128];
+static char mqtt_payload_current[128];
+static char mqtt_cmd[150];
+
+volatile bool wakeup_event = false;
+
+Motor_State Motor1_State = MOTOR_STOP;  // Motor1状态
+Motor_State Motor2_State = MOTOR_STOP;  // Motor2状态
+
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_ADC_Init();
+  MX_USART2_UART_Init();
+  MX_TIM2_Init();
+  MX_RTC_Init();
+  /* USER CODE BEGIN 2 */
+  ADC_Manual_Calibration();
+
+  rx_buffer[0] = 0;
+  memset(tx_buffer, 0, UART_BUFFER_SIZE);
+  memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
+
+HAL_UART_Receive_IT(&huart2, rx_buffer, 1);
+
+//
+  Send_Wait_Start("AT+QSCLK=0", 2000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+  Send_Wait_Start("AT+CPSMS=0", 2000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+
+  Send_Wait_Start("AT",2000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+  Send_Wait_Start("AT+CGDCONT=1,IP,quectelnb",2000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+  Send_Wait_Start("AT+CGATT?",2000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+  Send_Wait_Start("AT+QMTCFG=version,0,1",3000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+  Send_Wait_Start("AT+QMTOPEN=0,183.230.102.116,1883",3000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+
+  Send_Wait_Start("AT+QMTCONN=0,m002,I773FLY13q,version=2018-10-31&res=products%2FI773FLY13q%2Fdevices%2Fm002&et=1787896162&method=md5&sign=25YWkBFNMJ9Bag7ZrzuZxQ%3D%3D",3000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+
+
+  Send_Wait_Start("AT+QMTSUB=0,1,$sys/I773FLY13q/m002/#,0",3000);
+  while(!Send_Wait_IsDone()) {
+
+   }
+
+
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+//
+	  HAL_GPIO_WritePin(IO3_GPIO_Port, IO3_Pin, GPIO_PIN_SET);
+	  /*Configure GPIO pin Output Level */
+	  HAL_GPIO_WritePin(GPIOB, IO4_Pin, GPIO_PIN_SET);
+
+
+//
+//	    if (!Check_NB_Connection())
+//	  	        {
+//	  	            connection_fail_count++;
+//	  	            if (connection_fail_count >= 3)  // Retry threshold before reconnect
+//	  	            {
+//	  	            	Reset_NBModule();
+//	  	                connection_fail_count = 0;
+//	  	                HAL_Delay(1000);
+//	  	            }
+//	  	        }
+//	  	        else
+//	  	        {
+//	  	            connection_fail_count = 0; // Reset fail count if connection is good
+//	  	        }
+//
+		Send_Wait_Start("AT+CPSMS=0", 2000);
+		while(!Send_Wait_IsDone()){
+		}
+
+
+		if (open_lid) {
+			open_lid = false;
+			uint8_t result = Calibrate(Motor2);
+			if (result == 1){
+				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+				Send_Wait_Start(mqtt_cmd, 2000);
+				while(!Send_Wait_IsDone()){
+				}
+				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
+				Send_Wait_Start(mqtt_payload_current, 3000);
+				while(!Send_Wait_IsDone()){
+				}
+			}
+			if (result == 2){
+				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+				Send_Wait_Start(mqtt_cmd, 2000);
+				while(!Send_Wait_IsDone()){
+				}
+				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
+				Send_Wait_Start(mqtt_payload_current, 3000);
+				while(!Send_Wait_IsDone()){
+				}
+			}
+		}
+
+		if (close_lid) {
+			close_lid = false;
+			uint8_t result = Calibrate(Motor1);
+
+			if (result == 1){
+				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+				Send_Wait_Start(mqtt_cmd, 2000);
+				while(!Send_Wait_IsDone()){
+				}
+				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
+				Send_Wait_Start(mqtt_payload_current, 3000);
+				while(!Send_Wait_IsDone()){
+				}
+			}
+			if (result == 2){
+				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+				Send_Wait_Start(mqtt_cmd, 2000);
+				while(!Send_Wait_IsDone()){
+				}
+				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
+				Send_Wait_Start(mqtt_payload_current, 3000);
+				while(!Send_Wait_IsDone()){
+				}
+			}
+		}
+
+
+	    float water_height_cm = Get_Height_from_Pressure();
+
+	    if(water_height_cm > 10.0f){
+	    	snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+	    	Send_Wait_Start(mqtt_cmd, 2000);
+	      	  while(!Send_Wait_IsDone()) {
+	      	  }
+	      	  snprintf(mqtt_payload_water, sizeof(mqtt_payload_water), "{\"id\":\"123\",\"params\":{\"level\":{\"value\":%.1f}}}", water_height_cm);
+	      	  Send_Wait_Start(mqtt_payload_water, 3000);
+	      	  while(!Send_Wait_IsDone()) {
+	      	  }
+
+	      	  Calibrate(Motor2); //open lid
+	      	  uint8_t result = Calibrate(Motor2);
+
+	      	  if (result == 1){
+					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+					Send_Wait_Start(mqtt_cmd, 2000);
+					while(!Send_Wait_IsDone()){
+					}
+					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
+					Send_Wait_Start(mqtt_payload_current, 3000);
+					while(!Send_Wait_IsDone()){
+					}
+	      	  }
+				if (result == 2){
+					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+					Send_Wait_Start(mqtt_cmd, 2000);
+					while(!Send_Wait_IsDone()){
+					}
+					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
+					Send_Wait_Start(mqtt_payload_current, 3000);
+					while(!Send_Wait_IsDone()){
+					}
+				}
+
+			}
+
+ 	        float battery_v = Get_Battery_Voltage();
+	   	    snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+	   	    Send_Wait_Start(mqtt_cmd, 2000);
+	   	    while(!Send_Wait_IsDone()) {
+	   	    }
+
+	   	    snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"battery\":{\"value\":%.1f}}}", battery_v);
+	        Send_Wait_Start(mqtt_payload_current, 3000);
+	        while(!Send_Wait_IsDone()) {
+	        }
+
+//
+//
+//
+//			Send_Wait_Start("AT+CPSMS=1", 2000);
+//			while(!Send_Wait_IsDone()){
+//			}
+//
+//	        RTC_Set_Wakeup_Timer(45);
+//
+////	        // Go to deep sleep
+//	        Enter_Stop_Mode();
+	  HAL_Delay(100);
+	}
+
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /** Configure the main internal regulator output voltage
+  */
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLLMUL_4;
+  RCC_OscInitStruct.PLL.PLLDIV = RCC_PLLDIV_2;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_RTC;
+  PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/* USER CODE BEGIN 4 */
+
+void RTC_Set_Wakeup_Timer(uint16_t seconds)
+{
+    // Disable write protection
+    HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
+
+    // L0 series usually uses a 1Hz clock for the wakeup timer if configured with CK_SPRE
+    // 0x0000 is the value for 16-bit counter.
+    // Ensure CubeMX RTC WakeUp Clock is set to: RTC_WAKEUPCLOCK_CK_SPRE_16BITS
+
+    if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, seconds, RTC_WAKEUPCLOCK_CK_SPRE_16BITS) != HAL_OK)
+    {
+        Error_Handler();
+    }
+}
+
+void Enter_Stop_Mode(void)
+{
+
+    HAL_GPIO_WritePin(IO3_GPIO_Port, IO3_Pin, GPIO_PIN_RESET);
+    /*Configure GPIO pin Output Level */
+    HAL_GPIO_WritePin(GPIOB, IO4_Pin, GPIO_PIN_RESET);
+    HAL_ADC_Stop(&hadc);
+    // 1. Suspend SysTick to prevent it from waking the MCU every 1ms
+    HAL_SuspendTick();
+
+    // 2. Enter Stop Mode
+    // Regulator Low Power implies deeper sleep but slower wake-up
+    HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+
+    // --- SLEEPING HAPPENS HERE ---
+    // The code pauses here until the RTC Interrupt fires.
+    MX_GPIO_Init();
+
+
+    MX_ADC_Init();
+    // 3. Resume SysTick
+
+    HAL_ResumeTick();
+
+    // 4. CRITICAL: Restore System Clock
+    // When waking from STOP, MSI or HSI is used. You must re-init your PLL/HSE.
+    SystemClock_Config();
+}
+
+// RTC Interrupt Callback
+void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc)
+{
+    // This function is called when the timer expires
+    wakeup_event = true;
+}
+
+
+void Delay_Start(uint32_t ms) {
+    delay_start = HAL_GetTick();
+    delay_duration = ms;
+    delay_active = true;
+}
+
+// Check if delay has elapsed
+bool Delay_Elapsed(void) {
+    if (!delay_active) return true;
+    if ((HAL_GetTick() - delay_start) >= delay_duration) {
+        delay_active = false;
+        return true;
+    }
+    return false;
+}
+
+
+bool Check_NB_Connection(void)
+{
+    // Check network attach status
+	Send_Wait_Start("AT+CGATT?", 2000);
+    while(!Send_Wait_IsDone()) {
+
+     }
+    if (strstr((char*)rx_buffer_full, "1") == NULL) return false;
+
+    // Check MQTT connection (example checking QMTCONN response)
+    Send_Wait_Start("AT+QMTCONN?", 2000);
+    while(!Send_Wait_IsDone()) {
+
+     }
+    if (strstr((char*)rx_buffer_full, "OK") == NULL) return false;
+
+    return true;
+}
+
+void Reset_NBModule(void)
+{
+//	HAL_Init();
+//	SystemClock_Config();
+//	MX_GPIO_Init();
+//	MX_USART2_UART_Init();
+//	MX_ADC_Init();
+//	MX_TIM2_Init();
+
+
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+	Send_Wait_Start("", 1000);
+		    while(!Send_Wait_IsDone()) {
+
+		     }
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+	Send_Wait_Start("", 1000);
+		    while(!Send_Wait_IsDone()) {
+
+		     }
+
+
+
+	  rx_buffer[0] = 0;
+	  memset(tx_buffer, 0, UART_BUFFER_SIZE);
+
+	  HAL_UART_Receive_IT(&huart2, rx_buffer, 1);
+
+	  Send_Wait_Start("AT+QSCLK=0", 2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+	    Send_Wait_Start("AT+CPSMS=0", 2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+	    Send_Wait_Start("AT",2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+	    Send_Wait_Start("AT+CGDCONT=1,IP,quectelnb",2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+	    Send_Wait_Start("AT+CGATT?",2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+	    Send_Wait_Start("AT+QMTCFG=version,0,1",2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+	    Send_Wait_Start("AT+QMTOPEN=0,183.230.102.116,1883",2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+	    Send_Wait_Start("AT+QMTCONN=0,m002,I773FLY13q,version=2018-10-31&res=products%2FI773FLY13q%2Fdevices%2Fm002&et=1787896162&method=md5&sign=25YWkBFNMJ9Bag7ZrzuZxQ%3D%3D",2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+	    Send_Wait_Start("AT+QMTSUB=0,1,$sys/I773FLY13q/m002/#,0",2000);
+	    while(!Send_Wait_IsDone()) {
+
+	     }
+
+}
+
+
+
+void Move_DCMotor(Motor motor, Motor_State state)
+{
+
+	switch (motor)
+	{
+	case Motor1:
+        if (state == MOTOR_RUNNING)
+        {
+
+            HAL_TIM_PWM_Start(&htim2, DC_MOTOR1_PWM_CHANNEL);
+            Motor1_State = MOTOR_RUNNING;
+        }
+        else
+        {
+
+        	HAL_TIM_PWM_Stop(&htim2, DC_MOTOR1_PWM_CHANNEL);
+            Motor1_State = MOTOR_STOP;
+        }
+        break;
+
+	case Motor2:
+		if (state == MOTOR_RUNNING)
+		{
+		   HAL_TIM_PWM_Start(&htim2, DC_MOTOR2_PWM_CHANNEL);
+		   Motor2_State = MOTOR_RUNNING;
+		}
+		else
+		{
+			HAL_TIM_PWM_Stop(&htim2, DC_MOTOR2_PWM_CHANNEL);
+		     Motor2_State = MOTOR_STOP;
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+
+uint8_t Calibrate(Motor motor)
+{
+    GPIO_PinState sensor_state;
+	calibration_done = 0;
+    GPIO_TypeDef* sensor_port = GPIOA;
+    uint16_t sensor_pin = (motor == Motor1) ? GPIO_PIN_11 : GPIO_PIN_12;
+    uint32_t start_time = HAL_GetTick();
+
+
+    while (!calibration_done)
+    {
+    	sensor_state = HAL_GPIO_ReadPin(sensor_port, sensor_pin);
+    	if (sensor_state == GPIO_PIN_RESET)
+    	    {
+    	      Move_DCMotor(motor, MOTOR_STOP);
+    	      calibration_done = 1;
+    	      return 0;
+    	    }
+    	else {
+    	    	Move_DCMotor(motor, MOTOR_RUNNING);
+
+//    			current_from_motor = Get_Average_Current(3);
+//    			if (current_from_motor >= CURRENT_THRESHOLD)
+//    	        {
+//    				Move_DCMotor(motor, MOTOR_STOP);
+//    	            calibration_done = 1;
+//    	            return 1;
+//    	        }
+
+
+    	        if ((HAL_GetTick() - start_time) > DC_MOTOR_MAX_RUN_TIME)
+               {
+    	        	Move_DCMotor(motor, MOTOR_STOP);
+    	        	calibration_done = 1;
+    	        	return 2;  //timeout
+               }
+
+    		}
+        HAL_Delay(50);
+    }
+    return 0;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART2) {
+       uint8_t received_char = rx_buffer[0];
+
+        // Append received byte to buffer with overflow check
+        if (rx_index < UART_BUFFER_SIZE - 1) {
+            rx_buffer_full[rx_index++] = received_char;
+        } else {
+            rx_index = 0;       // Reset buffer for next message
+            memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
+
+        }
+
+
+        if (received_char == '\n' || received_char == '\r') {
+            rx_buffer_full[rx_index] = '\0';  // Null-terminate string
+
+
+   	     if (strstr((char*)rx_buffer_full, "\"temp\":1") != NULL) {
+   	         open_lid = true;
+   	     } else if (strstr((char*)rx_buffer_full, "\"temp\":0") != NULL) {
+   	         close_lid = true;
+   	     }
+            // Clear buffer for next message
+            rx_index = 0;
+            memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
+        }
+
+        // Rearm UART receive interrupt for next byte to keep receiving continuously
+        HAL_UART_Receive_IT(&huart2, rx_buffer, 1);
+    }
+}
+
+
+
+void Send_mqtt(const char *command) {
+
+    snprintf((char*)tx_buffer, UART_BUFFER_SIZE, "%s\r\n", command);  // Add CRLF to the command
+    HAL_UART_Transmit(&huart2, tx_buffer, UART_BUFFER_SIZE, 1000);  // Send command
+}
+
+void Send_Wait_Start(const char* command, uint16_t timeout_ms) {
+    Send_mqtt(command);
+    sendCommand = command;
+    sendTimeout = timeout_ms;
+    sendStartTick = HAL_GetTick();
+    sendInProgress = true;
+}
+
+bool Send_Wait_IsDone(void) {
+    if (!sendInProgress) return true;
+
+    uint32_t send_now = HAL_GetTick();
+    if ((send_now - sendStartTick) >= sendTimeout) {
+        sendInProgress = false;
+        return true;  // timeout elapsed, assume send done
+    }
+    return false;  // still waiting
+}
+
+
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+
+  while (1)
+  {
+  }
+  /* USER CODE END Error_Handler_Debug */
+}
+#ifdef USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
