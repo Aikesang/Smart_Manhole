@@ -49,7 +49,7 @@ float Get_MCU_Voltage(void)
 {
     uint32_t raw_vref = Read_ADC_Channel(ADC_CHANNEL_17);
 
-    if (raw_vref == 0) return 3.27f;
+    if (raw_vref == 0) return 3.3f;
 
     // Factory Calibrated VREFINT at 3.0V (Address for STM32L0)
     uint32_t vref_cal = *VREFINT_CAL_ADDR;
@@ -70,7 +70,7 @@ float Get_Battery_Voltage(void)
     // 3. Convert Raw ADC to Pin Voltage
     float pin_voltage = ((float)battery_adc * mcu_voltage) / 4095.0f;
 
-    return pin_voltage * 2.0f;
+    return pin_voltage * 2.35f;
 }
 
 float Get_Current(void)
@@ -106,10 +106,20 @@ float Get_Average_Current(uint8_t samples)
     for(int i = 0; i < samples; i++)
     {
         total_current += Get_Current();
+
     }
     return total_current / (float)samples;
 }
 
+float Get_Average_voltage(uint8_t samples_v)
+{
+    float total_voltage = 0.0f;
+    for(int i = 0; i < samples_v; i++)
+    {
+        total_voltage += Get_Battery_Voltage();
+    }
+    return total_voltage / (float)samples_v;
+}
 float Get_Pressure_kPa(void)
 {
     float mcu_voltage = Get_MCU_Voltage();

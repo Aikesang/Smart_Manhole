@@ -44,7 +44,7 @@
 #define DC_MOTOR1_PWM_CHANNEL    TIM_CHANNEL_1
 #define DC_MOTOR2_PWM_CHANNEL    TIM_CHANNEL_2
 #define DC_MOTOR_MAX_RUN_TIME    300000
-#define CURRENT_THRESHOLD        0.8f
+#define CURRENT_THRESHOLD        1.4f
 
 #define NB_CHECK_INTERVAL_MS 60000 // Check NB connection every 60 s
 /* USER CODE END PD */
@@ -177,55 +177,55 @@ int main(void)
 
 HAL_UART_Receive_IT(&huart2, rx_buffer, 1);
 
+
+//  Send_Wait_Start("AT+QSCLK=0", 2000);
+//  while(!Send_Wait_IsDone()) {
 //
-  Send_Wait_Start("AT+QSCLK=0", 2000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-  Send_Wait_Start("AT+CPSMS=0", 2000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-
-  Send_Wait_Start("AT",2000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-  Send_Wait_Start("AT+CGDCONT=1,IP,quectelnb",2000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-  Send_Wait_Start("AT+CGATT?",2000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-  Send_Wait_Start("AT+QMTCFG=version,0,1",3000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-  Send_Wait_Start("AT+QMTOPEN=0,183.230.102.116,1883",3000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-
-  Send_Wait_Start("AT+QMTCONN=0,m002,I773FLY13q,version=2018-10-31&res=products%2FI773FLY13q%2Fdevices%2Fm002&et=1787896162&method=md5&sign=25YWkBFNMJ9Bag7ZrzuZxQ%3D%3D",3000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-
-
-  Send_Wait_Start("AT+QMTSUB=0,1,$sys/I773FLY13q/m002/#,0",3000);
-  while(!Send_Wait_IsDone()) {
-
-   }
+//   }
+//
+//  Send_Wait_Start("AT+CPSMS=0", 2000);
+//  while(!Send_Wait_IsDone()) {
+//
+//   }
+//
+//
+//  Send_Wait_Start("AT",2000);
+//  while(!Send_Wait_IsDone()) {
+//
+//   }
+//
+//  Send_Wait_Start("AT+CGDCONT=1,IP,quectelnb",2000);
+//  while(!Send_Wait_IsDone()) {
+//
+//   }
+//
+//  Send_Wait_Start("AT+CGATT?",2000);
+//  while(!Send_Wait_IsDone()) {
+//
+//   }
+//
+//  Send_Wait_Start("AT+QMTCFG=version,0,1",3000);
+//  while(!Send_Wait_IsDone()) {
+//
+//   }
+//
+//  Send_Wait_Start("AT+QMTOPEN=0,183.230.102.116,1883",3000);
+//  while(!Send_Wait_IsDone()) {
+//
+//   }
+//
+//
+//  Send_Wait_Start("AT+QMTCONN=0,m002,I773FLY13q,version=2018-10-31&res=products%2FI773FLY13q%2Fdevices%2Fm002&et=1787896162&method=md5&sign=25YWkBFNMJ9Bag7ZrzuZxQ%3D%3D",3000);
+//  while(!Send_Wait_IsDone()) {
+//
+//   }
+//
+//
+//
+//  Send_Wait_Start("AT+QMTSUB=0,1,$sys/I773FLY13q/m002/#,0",3000);
+//  while(!Send_Wait_IsDone()) {
+//
+//   }
 
 
   /* USER CODE END 2 */
@@ -241,7 +241,6 @@ HAL_UART_Receive_IT(&huart2, rx_buffer, 1);
 	  HAL_GPIO_WritePin(IO3_GPIO_Port, IO3_Pin, GPIO_PIN_SET);
 	  /*Configure GPIO pin Output Level */
 	  HAL_GPIO_WritePin(GPIOB, IO4_Pin, GPIO_PIN_SET);
-
 
 //
 //	    if (!Check_NB_Connection())
@@ -259,111 +258,120 @@ HAL_UART_Receive_IT(&huart2, rx_buffer, 1);
 //	  	            connection_fail_count = 0; // Reset fail count if connection is good
 //	  	        }
 //
-		Send_Wait_Start("AT+CPSMS=0", 2000);
-		while(!Send_Wait_IsDone()){
-		}
+//		Send_Wait_Start("AT+CPSMS=0", 2000);
+//		while(!Send_Wait_IsDone()){
+//		}
 
 
-		if (open_lid) {
-			open_lid = false;
-			uint8_t result = Calibrate(Motor2);
-			if (result == 1){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 2000);
-				while(!Send_Wait_IsDone()){
-				}
-				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
-				Send_Wait_Start(mqtt_payload_current, 3000);
-				while(!Send_Wait_IsDone()){
-				}
-			}
-			if (result == 2){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 2000);
-				while(!Send_Wait_IsDone()){
-				}
-				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
-				Send_Wait_Start(mqtt_payload_current, 3000);
-				while(!Send_Wait_IsDone()){
-				}
-			}
-		}
 
-		if (close_lid) {
-			close_lid = false;
-			uint8_t result = Calibrate(Motor1);
+	  Move_DCMotor(Motor2, MOTOR_RUNNING);
+	  HAL_Delay(100);
+	  float mcu_v = Get_MCU_Voltage();
+	  uint32_t adc_val = Read_ADC_Channel(ADC_CHANNEL_1);
+	  float sensitivity_c = 0.044f * (3.0f / 3.3f);
+	  float current_from_motor = Get_Average_Current(10);
+	  float vol = Get_Average_voltage(10);
 
-			if (result == 1){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 2000);
-				while(!Send_Wait_IsDone()){
-				}
-				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
-				Send_Wait_Start(mqtt_payload_current, 3000);
-				while(!Send_Wait_IsDone()){
-				}
-			}
-			if (result == 2){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 2000);
-				while(!Send_Wait_IsDone()){
-				}
-				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
-				Send_Wait_Start(mqtt_payload_current, 3000);
-				while(!Send_Wait_IsDone()){
-				}
-			}
-		}
-
-
-	    float water_height_cm = Get_Height_from_Pressure();
-
-	    if(water_height_cm > 10.0f){
-	    	snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-	    	Send_Wait_Start(mqtt_cmd, 2000);
-	      	  while(!Send_Wait_IsDone()) {
-	      	  }
-	      	  snprintf(mqtt_payload_water, sizeof(mqtt_payload_water), "{\"id\":\"123\",\"params\":{\"level\":{\"value\":%.1f}}}", water_height_cm);
-	      	  Send_Wait_Start(mqtt_payload_water, 3000);
-	      	  while(!Send_Wait_IsDone()) {
-	      	  }
-
-	      	  Calibrate(Motor2); //open lid
-	      	  uint8_t result = Calibrate(Motor2);
-
-	      	  if (result == 1){
-					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-					Send_Wait_Start(mqtt_cmd, 2000);
-					while(!Send_Wait_IsDone()){
-					}
-					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
-					Send_Wait_Start(mqtt_payload_current, 3000);
-					while(!Send_Wait_IsDone()){
-					}
-	      	  }
-				if (result == 2){
-					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-					Send_Wait_Start(mqtt_cmd, 2000);
-					while(!Send_Wait_IsDone()){
-					}
-					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
-					Send_Wait_Start(mqtt_payload_current, 3000);
-					while(!Send_Wait_IsDone()){
-					}
-				}
-
-			}
-
- 	        float battery_v = Get_Battery_Voltage();
-	   	    snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-	   	    Send_Wait_Start(mqtt_cmd, 2000);
-	   	    while(!Send_Wait_IsDone()) {
-	   	    }
-
-	   	    snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"battery\":{\"value\":%.1f}}}", battery_v);
-	        Send_Wait_Start(mqtt_payload_current, 3000);
-	        while(!Send_Wait_IsDone()) {
-	        }
+//		if (open_lid) {
+//			open_lid = false;
+//			uint8_t result = Calibrate(Motor2);
+//			if (result == 1){
+//				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+//				Send_Wait_Start(mqtt_cmd, 2000);
+//				while(!Send_Wait_IsDone()){
+//				}
+//				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
+//				Send_Wait_Start(mqtt_payload_current, 3000);
+//				while(!Send_Wait_IsDone()){
+//				}
+//			}
+//			if (result == 2){
+//				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+//				Send_Wait_Start(mqtt_cmd, 2000);
+//				while(!Send_Wait_IsDone()){
+//				}
+//				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
+//				Send_Wait_Start(mqtt_payload_current, 3000);
+//				while(!Send_Wait_IsDone()){
+//				}
+//			}
+//		}
+//
+//		if (close_lid) {
+//			close_lid = false;
+//			uint8_t result = Calibrate(Motor1);
+//
+//			if (result == 1){
+//				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+//				Send_Wait_Start(mqtt_cmd, 2000);
+//				while(!Send_Wait_IsDone()){
+//				}
+//				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
+//				Send_Wait_Start(mqtt_payload_current, 3000);
+//				while(!Send_Wait_IsDone()){
+//				}
+//			}
+//			if (result == 2){
+//				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+//				Send_Wait_Start(mqtt_cmd, 2000);
+//				while(!Send_Wait_IsDone()){
+//				}
+//				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
+//				Send_Wait_Start(mqtt_payload_current, 3000);
+//				while(!Send_Wait_IsDone()){
+//				}
+//			}
+//		}
+//
+//
+//	    float water_height_cm = Get_Height_from_Pressure();
+//
+//	    if(water_height_cm > 10.0f){
+//	    	snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+//	    	Send_Wait_Start(mqtt_cmd, 2000);
+//	      	  while(!Send_Wait_IsDone()) {
+//	      	  }
+//	      	  snprintf(mqtt_payload_water, sizeof(mqtt_payload_water), "{\"id\":\"123\",\"params\":{\"level\":{\"value\":%.1f}}}", water_height_cm);
+//	      	  Send_Wait_Start(mqtt_payload_water, 3000);
+//	      	  while(!Send_Wait_IsDone()) {
+//	      	  }
+//
+//	      	  Calibrate(Motor2); //open lid
+//	      	  uint8_t result = Calibrate(Motor2);
+//
+//	      	  if (result == 1){
+//					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+//					Send_Wait_Start(mqtt_cmd, 2000);
+//					while(!Send_Wait_IsDone()){
+//					}
+//					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":2.0}}}");
+//					Send_Wait_Start(mqtt_payload_current, 3000);
+//					while(!Send_Wait_IsDone()){
+//					}
+//	      	  }
+//				if (result == 2){
+//					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+//					Send_Wait_Start(mqtt_cmd, 2000);
+//					while(!Send_Wait_IsDone()){
+//					}
+//					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"current\":{\"value\":3.0}}}");
+//					Send_Wait_Start(mqtt_payload_current, 3000);
+//					while(!Send_Wait_IsDone()){
+//					}
+//				}
+//
+//			}
+//
+// 	        float battery_v = Get_Average_voltage(5);
+//	   	    snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
+//	   	    Send_Wait_Start(mqtt_cmd, 2000);
+//	   	    while(!Send_Wait_IsDone()) {
+//	   	    }
+//
+//	   	    snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"battery\":{\"value\":%.1f}}}", battery_v);
+//	        Send_Wait_Start(mqtt_payload_current, 3000);
+//	        while(!Send_Wait_IsDone()) {
+//	        }
 
 //
 //
@@ -661,13 +669,13 @@ uint8_t Calibrate(Motor motor)
     	else {
     	    	Move_DCMotor(motor, MOTOR_RUNNING);
 
-//    			current_from_motor = Get_Average_Current(3);
-//    			if (current_from_motor >= CURRENT_THRESHOLD)
-//    	        {
-//    				Move_DCMotor(motor, MOTOR_STOP);
-//    	            calibration_done = 1;
-//    	            return 1;
-//    	        }
+    			current_from_motor = Get_Average_Current(10);
+    			if (current_from_motor >= CURRENT_THRESHOLD)
+    	        {
+    				Move_DCMotor(motor, MOTOR_STOP);
+    	            calibration_done = 1;
+    	            return 1;
+    	        }
 
 
     	        if ((HAL_GetTick() - start_time) > DC_MOTOR_MAX_RUN_TIME)

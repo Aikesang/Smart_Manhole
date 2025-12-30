@@ -14,5 +14,6 @@ float Get_Height_from_Pressure(void);
 void ADC_Manual_Calibration(void);
 float Get_Average_Current(uint8_t samples);
 float Get_Battery_Voltage(void);
+float Get_Average_voltage(uint8_t samples_v);
 
 #endif /* INC_ADC_PRESSURE_H_ */

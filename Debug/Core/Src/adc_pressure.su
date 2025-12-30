@@ -4,5 +4,6 @@
 ../Core/Src/adc_pressure.c:61:7:Get_Battery_Voltage	24	static
 ../Core/Src/adc_pressure.c:76:7:Get_Current	32	static
 ../Core/Src/adc_pressure.c:103:7:Get_Average_Current	24	static
-../Core/Src/adc_pressure.c:113:7:Get_Pressure_kPa	24	static
-../Core/Src/adc_pressure.c:131:7:Get_Height_from_Pressure	16	static
+../Core/Src/adc_pressure.c:114:7:Get_Average_voltage	24	static
+../Core/Src/adc_pressure.c:123:7:Get_Pressure_kPa	24	static
+../Core/Src/adc_pressure.c:141:7:Get_Height_from_Pressure	16	static
