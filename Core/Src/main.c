@@ -45,7 +45,7 @@
 #define DC_MOTOR1_PWM_CHANNEL    TIM_CHANNEL_1
 #define DC_MOTOR2_PWM_CHANNEL    TIM_CHANNEL_2
 #define DC_MOTOR_MAX_RUN_TIME    300000
-#define CURRENT_THRESHOLD        3.8f
+#define CURRENT_THRESHOLD        4.0f
 #define NB_CHECK_WAKEUP_COUNT  12
 /* USER CODE END PD */
 
@@ -193,18 +193,7 @@ int main(void)
 
    }
 
-
-  Send_Wait_Start("AT",2000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
   Send_Wait_Start("AT+CGDCONT=1,IP,quectelnb",2000);
-  while(!Send_Wait_IsDone()) {
-
-   }
-
-  Send_Wait_Start("AT+CGATT?",2000);
   while(!Send_Wait_IsDone()) {
 
    }
@@ -240,32 +229,24 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-//
-	  HAL_GPIO_WritePin(IO3_GPIO_Port, IO3_Pin, GPIO_PIN_SET);
-	  /*Configure GPIO pin Output Level */
-	  HAL_GPIO_WritePin(GPIOB, IO4_Pin, GPIO_PIN_SET);
 
+	  HAL_GPIO_WritePin(IO3_GPIO_Port, IO3_Pin, GPIO_PIN_SET);
+	  HAL_GPIO_WritePin(GPIOB, IO4_Pin, GPIO_PIN_SET);
+	  HAL_Delay(100);
 
 	  wakeup_counter++;
 	  if(wakeup_counter >= NB_CHECK_WAKEUP_COUNT){
 
-		  	 if (!Check_NB_Connection())
-	  	     {
-		  		 connection_fail_count++;
-	  	       if (connection_fail_count >= 3)  // Retry threshold before reconnect
-	  	       {
-	  	         Reset_NBModule();
-	  	         connection_fail_count = 0;
-	  	         HAL_Delay(500);
-	  	       }
-	  	     }
-	  	     else
-	  	     {
-	  	         connection_fail_count = 0; // Reset fail count if connection is good
-	  	     }
+		  bool is_connected = Check_NB_Connection();
 
-	    	wakeup_counter = 0;
-	  }
+		  if (!is_connected)
+		      {
+		          Reset_NBModule();
+		          HAL_Delay(500);
+		      }
+
+		      wakeup_counter = 0;
+		  }
 
 
 		if (open_lid) {
@@ -446,16 +427,11 @@ int main(void)
 		        Send_Wait_Start(mqtt_payload_current, 1000);
 		        while(!Send_Wait_IsDone()) {
 		        }
-
-
-		        RTC_Set_Wakeup_Timer(60);
-
-	//	        // Go to deep sleep
+		        RTC_Set_Wakeup_Timer(330);
 		        Enter_Stop_Mode();
 	      }
 
-
-	        HAL_Delay(100);
+	      HAL_Delay(100);
 }
 
   /* USER CODE END 3 */
@@ -557,6 +533,7 @@ void Enter_Stop_Mode(void)
     // 4. CRITICAL: Restore System Clock
     // When waking from STOP, MSI or HSI is used. You must re-init your PLL/HSE.
     SystemClock_Config();
+
 }
 
 // RTC Interrupt Callback
@@ -597,25 +574,12 @@ bool Check_NB_Connection(void)
 
 void Reset_NBModule(void)
 {
-//	HAL_Init();
-//	SystemClock_Config();
-//	MX_GPIO_Init();
-//	MX_USART2_UART_Init();
-//	MX_ADC_Init();
-//	MX_TIM2_Init();
 
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
-	Send_Wait_Start("", 1000);
-		    while(!Send_Wait_IsDone()) {
+    HAL_Delay(500);
 
-		     }
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
-	Send_Wait_Start("", 1000);
-		    while(!Send_Wait_IsDone()) {
-
-		     }
-
-
+    HAL_Delay(500);
 
 	  rx_buffer[0] = 0;
 	  memset(tx_buffer, 0, UART_BUFFER_SIZE);
@@ -632,17 +596,7 @@ void Reset_NBModule(void)
 
 	     }
 
-	    Send_Wait_Start("AT",2000);
-	    while(!Send_Wait_IsDone()) {
-
-	     }
-
 	    Send_Wait_Start("AT+CGDCONT=1,IP,quectelnb",2000);
-	    while(!Send_Wait_IsDone()) {
-
-	     }
-
-	    Send_Wait_Start("AT+CGATT?",2000);
 	    while(!Send_Wait_IsDone()) {
 
 	     }
@@ -726,7 +680,7 @@ uint8_t Calibrate(Motor motor)
     	    {
     	      Move_DCMotor(motor, MOTOR_STOP);
     	      calibration_done = 1;
-    	      return 4;
+    	      return 0;
     	    }
     	else {
     	    	Move_DCMotor(motor, MOTOR_RUNNING);

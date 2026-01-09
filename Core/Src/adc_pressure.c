@@ -70,7 +70,7 @@ float Get_Battery_Voltage(void)
     // 3. Convert Raw ADC to Pin Voltage
     float pin_voltage = ((float)battery_adc * mcu_voltage) / 4095.0f;
 
-    return pin_voltage * 2.35f;
+    return pin_voltage * 2.36f;
 }
 
 float Get_Current(void)
