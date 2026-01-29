@@ -1,4 +1,4 @@
-../Core/Src/main.c:152:5:main	44
+../Core/Src/main.c:152:5:main	58
 ../Core/Src/main.c:457:6:SystemClock_Config	4
 ../Core/Src/main.c:507:6:RTC_Set_Wakeup_Timer	2
 ../Core/Src/main.c:522:6:Enter_Stop_Mode	1
