@@ -138,7 +138,7 @@ volatile bool wakeup_event = false;
 Motor_State Motor1_State = MOTOR_STOP;  // Motor1状态
 Motor_State Motor2_State = MOTOR_STOP;  // Motor2状态
 
-uint8_t water_level_threshold = 10;
+int water_level_threshold = 51;
 volatile bool check_cmd_received = false;
 volatile bool check_subscribe = false;
 
@@ -352,8 +352,10 @@ int main(void)
 			}
 		}
 
-	    	uint8_t water_height_cm = Get_Height_from_Pressure();
 
+		if( !open_lid && !close_lid )
+		{
+			int water_height_cm = (int)Get_Height_from_Pressure();//water level exceeding update
 	    	if(water_height_cm > water_level_threshold){
 	    		snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
 	    		Send_Wait_Start(mqtt_cmd, 1000);
@@ -364,15 +366,16 @@ int main(void)
 	    		while(!Send_Wait_IsDone()) {
 	    		}
 				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 1000);
+				Send_Wait_Start(mqtt_cmd, 1500);
 				while(!Send_Wait_IsDone()){
 				}
-				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"open\"}}}");
+				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"openw\"}}}");
 				Send_Wait_Start(mqtt_payload_current, 1000);
 				while(!Send_Wait_IsDone()){
 				}
 
 	    		uint8_t result = Calibrate(Motor2);
+
 	    		if (result == 1){
 					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
 					Send_Wait_Start(mqtt_cmd, 1000);
@@ -405,7 +408,10 @@ int main(void)
 				}
 			}
 
- 	        float battery_v = Get_Average_voltage(5);
+		}
+
+
+ 	        float battery_v = Get_Average_voltage(5); //Battery voltage update
 	   	    snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
 	   	    Send_Wait_Start(mqtt_cmd, 1000);
 	   	    while(!Send_Wait_IsDone()) {

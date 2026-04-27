@@ -1,5 +1,9 @@
-../Core/Src/adc_pressure.c:9:10:Read_ADC_Value	8	static
-../Core/Src/adc_pressure.c:17:7:ADC_to_Voltage	8	static
-../Core/Src/adc_pressure.c:22:7:Voltage_to_kPa	8	static
-../Core/Src/adc_pressure.c:27:7:Get_Pressure_kPa	8	static
-../Core/Src/adc_pressure.c:40:7:Get_Height_from_Pressure	8	static
+../Core/Src/adc_pressure.c:15:6:ADC_Manual_Calibration	8	static
+../Core/Src/adc_pressure.c:24:10:Read_ADC_Channel	24	static
+../Core/Src/adc_pressure.c:48:7:Get_MCU_Voltage	16	static
+../Core/Src/adc_pressure.c:61:7:Get_Battery_Voltage	8	static
+../Core/Src/adc_pressure.c:76:7:Get_Current	8	static
+../Core/Src/adc_pressure.c:103:7:Get_Average_Current	16	static
+../Core/Src/adc_pressure.c:114:7:Get_Average_voltage	16	static
+../Core/Src/adc_pressure.c:123:7:Get_Pressure_kPa	8	static
+../Core/Src/adc_pressure.c:141:7:Get_Height_from_Pressure	8	static
