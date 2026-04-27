@@ -41,7 +41,6 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define UART_BUFFER_SIZE 200
-
 #define DC_MOTOR1_PWM_CHANNEL    TIM_CHANNEL_1
 #define DC_MOTOR2_PWM_CHANNEL    TIM_CHANNEL_2
 #define DC_MOTOR_MAX_RUN_TIME    300000
@@ -74,11 +73,15 @@ typedef enum {
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void Send_mqtt(const char *command);
+void Send_ATCommand(const char *command);
+void Send_RawData(const char *data, uint16_t length);
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 
 void Send_Wait_Start(const char* command, uint16_t timeout_ms);
+void Send_Wait_Start_Raw(const char* data, uint16_t length, uint16_t timeout_ms);
 bool Send_Wait_IsDone(void);
+
+bool Publish_MQTT(const char *payload, uint16_t timeout_ms);
 
 void Move_DCMotor(Motor motor, Motor_State state);
 uint8_t Calibrate(Motor motor);
@@ -91,8 +94,8 @@ void RTC_Set_Wakeup_Timer(uint16_t seconds);
 void Enter_Stop_Mode(void);
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc);
 bool Check_Subscribe(void);
-
-
+static void MQTT_Publish(const char* payload);
+static bool lid_is_open = false;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -108,6 +111,8 @@ float current_from_motor;
 float current_value;
 volatile uint8_t response_ready = 0;
 char response_buffer[UART_BUFFER_SIZE];
+volatile bool command_response_received = false;
+volatile bool command_response_ok = false;
 
 volatile uint8_t calibration_done = 0;
 
@@ -138,7 +143,7 @@ volatile bool wakeup_event = false;
 Motor_State Motor1_State = MOTOR_STOP;  // Motor1状态
 Motor_State Motor2_State = MOTOR_STOP;  // Motor2状态
 
-int water_level_threshold = 51;
+int water_level_threshold = 50;
 volatile bool check_cmd_received = false;
 volatile bool check_subscribe = false;
 
@@ -265,90 +270,53 @@ int main(void)
 
 		if (open_lid) {
 			open_lid = false;
-			snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-			Send_Wait_Start(mqtt_cmd, 1000);
-			while(!Send_Wait_IsDone()){
-			}
 			snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"open\"}}}");
-			Send_Wait_Start(mqtt_payload_current, 1000);
-			while(!Send_Wait_IsDone()){
-			}
+			MQTT_Publish(mqtt_payload_current);
+
+
 
 			uint8_t result = Calibrate(Motor2);
+			if (result == 0) { lid_is_open = true; }
 			if (result == 1){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 1000);
-				while(!Send_Wait_IsDone()){
-				}
 				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"overo\"}}}");
-				Send_Wait_Start(mqtt_payload_current, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+				MQTT_Publish(mqtt_payload_current);
 			}
 			if (result == 2){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+
 				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"timeo\"}}}");
-				Send_Wait_Start(mqtt_payload_current, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+				MQTT_Publish(mqtt_payload_current);
 			}
 			if (result == 3){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+
 				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"halto\"}}}");
-				Send_Wait_Start(mqtt_payload_current, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+				MQTT_Publish(mqtt_payload_current);
 			}
 		}
 
 		if (close_lid) {
 			close_lid = false;
 
-			snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-			Send_Wait_Start(mqtt_cmd, 1000);
-			while(!Send_Wait_IsDone()){
-			}
 			snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"close\"}}}");
-			Send_Wait_Start(mqtt_payload_current, 1000);
-			while(!Send_Wait_IsDone()){
-			}
+			MQTT_Publish(mqtt_payload_current);
 
 			uint8_t result = Calibrate(Motor1);
+
+			if (result == 0) { lid_is_open = false; }  // <-- mark lid closed
+
 			if (result == 1){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+
 				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"overc\"}}}");
-				Send_Wait_Start(mqtt_payload_current, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+				MQTT_Publish(mqtt_payload_current);
 			}
 			if (result == 2){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+
 				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"timec\"}}}");
-				Send_Wait_Start(mqtt_payload_current, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+				MQTT_Publish(mqtt_payload_current);
 			}
 			if (result == 3){
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+
 				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"haltc\"}}}");
-				Send_Wait_Start(mqtt_payload_current, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+				MQTT_Publish(mqtt_payload_current);
 			}
 		}
 
@@ -356,55 +324,34 @@ int main(void)
 		if( !open_lid && !close_lid )
 		{
 			int water_height_cm = (int)Get_Height_from_Pressure();//water level exceeding update
-	    	if(water_height_cm > water_level_threshold){
-	    		snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-	    		Send_Wait_Start(mqtt_cmd, 1000);
-	    		while(!Send_Wait_IsDone()) {
-	    		}
+	    	if(water_height_cm > water_level_threshold && !lid_is_open){
+
 	    		snprintf(mqtt_payload_water, sizeof(mqtt_payload_water), "{\"id\":\"123\",\"params\":{\"level\":{\"value\":%d}}}", water_height_cm);
-	    		Send_Wait_Start(mqtt_payload_water, 1000);
-	    		while(!Send_Wait_IsDone()) {
-	    		}
-				snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-				Send_Wait_Start(mqtt_cmd, 1500);
-				while(!Send_Wait_IsDone()){
-				}
+	    		MQTT_Publish(mqtt_payload_water);
+
+
 				snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"openw\"}}}");
-				Send_Wait_Start(mqtt_payload_current, 1000);
-				while(!Send_Wait_IsDone()){
-				}
+				MQTT_Publish(mqtt_payload_current);
 
 	    		uint8_t result = Calibrate(Motor2);
 
+	            if (result == 0)
+	            {
+	                lid_is_open = true;  // <-- mark lid open on success
+	            }
 	    		if (result == 1){
-					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-					Send_Wait_Start(mqtt_cmd, 1000);
-					while(!Send_Wait_IsDone()){
-					}
+
 					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"overo\"}}}");
-					Send_Wait_Start(mqtt_payload_current, 1000);
-					while(!Send_Wait_IsDone()){
-					}
+					MQTT_Publish(mqtt_payload_current);
 	    		}
 				if (result == 2){
-					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-					Send_Wait_Start(mqtt_cmd, 1000);
-					while(!Send_Wait_IsDone()){
-					}
 					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"timeo\"}}}");
-					Send_Wait_Start(mqtt_payload_current, 1000);
-					while(!Send_Wait_IsDone()){
-					}
+					MQTT_Publish(mqtt_payload_current);
+
 				}
 				if (result == 3){
-					snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-					Send_Wait_Start(mqtt_cmd, 1000);
-					while(!Send_Wait_IsDone()){
-					}
 					snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"halto\"}}}");
-					Send_Wait_Start(mqtt_payload_current, 1000);
-					while(!Send_Wait_IsDone()){
-					}
+					MQTT_Publish(mqtt_payload_current);
 				}
 			}
 
@@ -412,17 +359,11 @@ int main(void)
 
 
  	        float battery_v = Get_Average_voltage(5); //Battery voltage update
-	   	    snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-	   	    Send_Wait_Start(mqtt_cmd, 1000);
-	   	    while(!Send_Wait_IsDone()) {
-	   	    }
 
 	   	    snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"battery\":{\"value\":%.1f}}}", battery_v);
-	        Send_Wait_Start(mqtt_payload_current, 1000);
-	        while(!Send_Wait_IsDone()) {
-	        }
+	   	    MQTT_Publish(mqtt_payload_current);
 
-	        uint32_t listen_timeout = 8000;
+	        uint32_t listen_timeout = 10000;
 	        uint32_t listen_start = HAL_GetTick();
 	        bool need_sleep = true;
 	        while((HAL_GetTick() - listen_start) < listen_timeout)
@@ -438,14 +379,10 @@ int main(void)
 
 	      if (need_sleep)
 	      {
-		   	    snprintf(mqtt_cmd, sizeof(mqtt_cmd), "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,47");
-		   	    Send_Wait_Start(mqtt_cmd, 1000);
-		   	    while(!Send_Wait_IsDone()) {
-		   	    }
 		   	    snprintf(mqtt_payload_current, sizeof(mqtt_payload_current), "{\"id\":\"123\",\"params\":{\"mnh\":{\"value\":\"sleep\"}}}");
-		        Send_Wait_Start(mqtt_payload_current, 1000);
-		        while(!Send_Wait_IsDone()) {
-		        }
+		   	    MQTT_Publish(mqtt_payload_current);
+
+
 		        RTC_Set_Wakeup_Timer(330);
 		        Enter_Stop_Mode();
 	      }
@@ -509,6 +446,21 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+// Add this helper in USER CODE 4 section
+static void MQTT_Publish(const char* payload)
+{
+    int payload_len = (int)strlen(payload);
+    snprintf(mqtt_cmd, sizeof(mqtt_cmd),
+             "AT+QMTPUB=0,0,0,0,$sys/I773FLY13q/m002/thing/property/post,%d",
+             payload_len);
+    Send_Wait_Start(mqtt_cmd, 1000);
+    while (!Send_Wait_IsDone()) {}
+    Send_Wait_Start(payload, 1000);
+    while (!Send_Wait_IsDone()) {}
+}
+
+
+
 
 void RTC_Set_Wakeup_Timer(uint16_t seconds)
 {
@@ -583,8 +535,10 @@ bool Delay_Elapsed(void) {
 
 bool Check_NB_Connection(void)
 {
+	__disable_irq();
 	memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
 	rx_index = 0;
+	__enable_irq();
 	check_cmd_received = false;
 	// Check network attach status
 	Send_Wait_Start("AT+CGATT?", 2000);
@@ -602,8 +556,10 @@ bool Check_NB_Connection(void)
 bool Check_Subscribe(void)
 {
 
+	__disable_irq();
 	memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
-    rx_index = 0;
+	rx_index = 0;
+	__enable_irq();
 	check_subscribe = false;
 
     Send_Wait_Start("AT+QMTSUB=0,1,$sys/I773FLY13q/m002/#,0", 2000);
@@ -631,6 +587,11 @@ void Reset_NBModule(void)
 
 	  rx_buffer[0] = 0;
 	  memset(tx_buffer, 0, UART_BUFFER_SIZE);
+
+	  __disable_irq();
+	  memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
+	  rx_index = 0;
+	  __enable_irq();
 
 	  HAL_UART_Receive_IT(&huart2, rx_buffer, 1);
 
@@ -771,8 +732,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
         if (rx_index < UART_BUFFER_SIZE - 1) {
             rx_buffer_full[rx_index++] = received_char;
         } else {
-            rx_index = 0;       // Reset buffer for next message
-            memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
+        	__disable_irq();
+        	memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
+        	rx_index = 0;
+        	__enable_irq();
 
         }
 
@@ -798,19 +761,20 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
    	     }
 
          char *level_ptr = NULL;
-         uint8_t new_level = 0;
          level_ptr = strstr((char*)rx_buffer_full, "\"level\":");
          if (level_ptr != NULL) {
-           level_ptr += 8;
-           new_level = atoi(level_ptr);
+        	 level_ptr += 8;
+        	 int new_level = atoi(level_ptr);
 
            if (new_level >= 0 && new_level <= 100) {
              water_level_threshold = new_level;
            }
 
          }
-            rx_index = 0;
-            memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
+         __disable_irq();
+         memset(rx_buffer_full, 0, UART_BUFFER_SIZE);
+         rx_index = 0;
+         __enable_irq();
         }
 
         // Rearm UART receive interrupt for next byte to keep receiving continuously
